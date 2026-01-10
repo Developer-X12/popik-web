@@ -22,11 +22,11 @@ export async function onRequestGet({ params, env }: any) {
         Accept: "application/json",
       },
     });
-
+    
     if (!res.ok) {
-      const text = await res.text();
-      return new Response(`Supabase error\nstatus=${res.status}\nurl=${url}\n\n${text}`, {
-        status: 500,
+      const body = await res.text();
+      return new Response(`Supabase error ${res.status}\n${body}`, {
+        status: res.status,
         headers: { "content-type": "text/plain; charset=utf-8" },
       });
     }
