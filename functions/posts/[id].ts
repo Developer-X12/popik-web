@@ -1,76 +1,49 @@
-export async function onRequestGet({ params, env, request }: any) {
+export async function onRequestGet({ params, env }: any) {
   const id = params.id as string;
 
-  // Supabase REST（public readできる前提：RLSがキツいなら後で調整）
+  // 1) env が入ってるか即チェック
+  if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) {
+    return new Response(
+      `Missing env\nSUPABASE_URL=${String(env.SUPABASE_URL)}\nSUPABASE_ANON_KEY=${env.SUPABASE_ANON_KEY ? "set" : "missing"}`,
+      { status: 500 }
+    );
+  }
+
   const url =
     `${env.SUPABASE_URL}/rest/v1/pick_posts` +
     `?id=eq.${encodeURIComponent(id)}` +
     `&select=question,image_a_url,image_b_url`;
 
-  const res = await fetch(url, {
-    headers: {
-      apikey: env.SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${env.SUPABASE_ANON_KEY}`,
-    },
-  });
+  try {
+    const res = await fetch(url, {
+      headers: {
+        apikey: env.SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${env.SUPABASE_ANON_KEY}`,
+        Accept: "application/json",
+      },
+    });
 
-  if (!res.ok) {
-    return new Response("Not found", { status: 404 });
+    if (!res.ok) {
+      const text = await res.text();
+      return new Response(`Supabase error\nstatus=${res.status}\nurl=${url}\n\n${text}`, {
+        status: 500,
+        headers: { "content-type": "text/plain; charset=utf-8" },
+      });
+    }
+
+    const rows = await res.json();
+    if (!rows?.length) {
+      return new Response("Not found (no rows)", { status: 404 });
+    }
+
+    // とりあえず成功確認用
+    return new Response(JSON.stringify(rows[0], null, 2), {
+      headers: { "content-type": "application/json; charset=utf-8" },
+    });
+  } catch (e: any) {
+    return new Response(`Exception\n${e?.stack || e?.message || String(e)}`, {
+      status: 500,
+      headers: { "content-type": "text/plain; charset=utf-8" },
+    });
   }
-
-  const rows = await res.json();
-  const post = rows?.[0];
-  if (!post) return new Response("Not found", { status: 404 });
-
-  const title = post.question ?? "Popik";
-  const desc = `Pick A or B. Share your gut pick!`;
-  const image = post.image_a_url || post.image_b_url || "";
-
-  const pageUrl = new URL(request.url).toString();
-
-  // ここは後で App Store のURL or スキームに差し替えればOK
-  const appLink = env.APP_LINK_FALLBACK || "https://popikapp.com";
-
-  const html = `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>${escapeHtml(title)}</title>
-
-  <!-- Open Graph -->
-  <meta property="og:type" content="website" />
-  <meta property="og:title" content="${escapeHtml(title)}" />
-  <meta property="og:description" content="${escapeHtml(desc)}" />
-  ${image ? `<meta property="og:image" content="${escapeHtml(image)}" />` : ""}
-  <meta property="og:url" content="${escapeHtml(pageUrl)}" />
-
-  <!-- Twitter -->
-  <meta name="twitter:card" content="${image ? "summary_large_image" : "summary"}" />
-  <meta name="twitter:title" content="${escapeHtml(title)}" />
-  <meta name="twitter:description" content="${escapeHtml(desc)}" />
-  ${image ? `<meta name="twitter:image" content="${escapeHtml(image)}" />` : ""}
-
-  <meta http-equiv="refresh" content="0; url=${escapeHtml(appLink)}" />
-</head>
-<body>
-  <p>Redirecting...</p>
-</body>
-</html>`;
-
-  return new Response(html, {
-    headers: {
-      "content-type": "text/html; charset=utf-8",
-      "cache-control": "public, max-age=60",
-    },
-  });
-}
-
-function escapeHtml(s: string) {
-  return String(s)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
 }
