@@ -12,7 +12,7 @@ export async function onRequestGet({ params, env }: any) {
   const url =
     `${env.SUPABASE_URL}/rest/v1/pick_posts` +
     `?id=eq.${encodeURIComponent(id)}` +
-    `&select=question,image_a_url,image_b_url`;
+    `&select=title,image_a_url,image_b_url`;
 
   try {
     const res = await fetch(url, {
